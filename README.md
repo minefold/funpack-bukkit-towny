@@ -1,5 +1,12 @@
-# Plugins
+# Bukkit Towny
 
+# Included plugins
 Essentials
-WorldGuard
-LWC
+Towny
+iConomy
+
+# In a new world
+
+    /give whatupdave 10000
+    /town new davetown
+    
