@@ -1,0 +1,123 @@
+#!/usr/bin/env ruby
+
+# encoding: UTF-8
+
+$:.unshift File.expand_path('../../lib', __FILE__)
+
+require 'bundler/setup'
+
+require 'bash'
+require 'json'
+require 'log_processor'
+require 'craftbelt/minecraft_instance'
+require 'open3'
+require 'settings'
+require 'templates'
+require 'time'
+
+include Bash
+
+STDOUT.sync = true
+STDIN.sync = true
+
+data_file = File.expand_path(ENV['DATAFILE'])
+$build = File.expand_path('../..', __FILE__)
+
+# setup working directory
+bash <<-EOS
+  mkdir -p plugins
+  cp -f #{$build}/craftbukkit.jar .
+  cp -f #{$build}/partycloud.jar plugins
+  cp -f #{$build}/essentials/*.jar plugins
+  cp -f #{$build}/towny/*.jar plugins
+  cp -f #{$build}/iConomy.jar plugins
+  cp -f #{$build}/Register.jar plugins
+EOS
+
+minecraft = Craftbelt::MinecraftInstance.new('.')
+data = JSON.parse(File.read(data_file), symbolize_names: true)
+
+schema = JSON.parse(File.read("#{$build}/funpack.json"))['schema']
+s = Settings.new(schema, data[:settings].merge(
+    "name" => data[:name],
+    "level-name" => (minecraft.level_paths.first || 'level')
+  )
+)
+
+t = Templates.new($build, s)
+t.create({
+  "server.properties.erb" => 'server.properties',
+  "motd.txt.erb" => 'plugins/Essentials/motd.txt',
+  "towny-config.yml.erb" => 'plugins/Towny/settings/config.yml',
+  # "iconomy-config.yml.erb" => 'plugins/iConomy/Config.yml',
+}, overwrite: true)
+
+t.create({
+}, overwrite: false)
+
+
+def player_list(player_setting)
+  # TODO remove this if when players are passed as an array
+  if player_setting.is_a? Array
+    player_setting.join("\n")
+  else
+    player_setting
+  end
+end
+
+
+File.write('ops.txt', player_list(data[:settings][:ops]))
+File.write('white-list.txt', player_list(data[:settings][:whitelist]))
+
+ram_max = (ENV['RAM'] || 1024).to_i
+ram_min = ram_max
+
+Open3.popen3("java",
+            "-server", "-XX:+UseConcMarkSweepGC",
+            "-Xms#{ram_min}M", "-Xmx#{ram_max}M",
+            "-jar", "craftbukkit.jar",
+            "nogui") do |stdin, stdout, stderr, wait_thr|
+
+  processor = LogProcessor.new(wait_thr.pid, s.schema)
+
+  begin
+    # read stdin. On list command we call partylist
+    # which is a custom plugin designed to return the real player names
+    # instead of nicknames
+    Thread.new do
+      while true
+        input = STDIN.readline.strip
+
+        case input
+        when 'list'
+          stdin.puts 'save-all'
+          stdin.puts 'partylist'
+
+        when /^kick (.*)$/
+          stdin.puts "partybounce #{$1}"
+
+        when 'stop'
+          stdin.puts 'save-all'
+          stdin.puts 'stop'
+
+        when 'stats'
+          stdin.puts 'lag'
+
+        else
+          stdin.puts input
+        end
+      end
+    end
+
+    Thread.new do
+      sleep 60
+      stdin.puts 'lag'
+    end
+
+    while true
+      processor.process_line stderr.readline
+    end
+  rescue EOFError
+  end
+  exit_status = wait_thr.value
+end

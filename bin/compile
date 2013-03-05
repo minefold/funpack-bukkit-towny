@@ -1,0 +1,108 @@
+#!/bin/bash
+# usage: bin/compile <build-dir> <cache-dir>
+
+set -eo pipefail
+
+mkdir -p "$1" "$2"
+build=$(cd "$1/" && pwd)
+cache=$(cd "$2/" && pwd)
+funpack=$(cd $(dirname $0)/.. && pwd)
+
+# craftbukkit
+ver="1.4.7-R1.0"
+if test -d $cache/craftbukkit-$ver
+then
+  echo "-----> Using craftbukkit $ver"
+else
+  rm -rf $cache/*
+  mkdir -p $cache/craftbukkit-$ver
+  cd $cache/craftbukkit-$ver
+  echo -n "-----> Installing craftbukkit $ver"
+  curl --silent -LO http://dl.bukkit.org/downloads/craftbukkit/get/01845_1.4.7-R1.0/craftbukkit.jar
+  echo " done"
+fi
+cp -R $cache/craftbukkit-$ver/craftbukkit.jar $build
+
+# partycloud
+partycloud_build="1"
+partycloud_url="http://funpack-assets.s3.amazonaws.com/Bukkit/partycloud.bukkit-$partycloud_build.tar.gz"
+if test -d $cache/partycloud-$partycloud_build
+then
+  echo "-----> Using Partycloud $partycloud_build"
+else
+  mkdir -p $cache/partycloud-$partycloud_build
+  cd $cache/partycloud-$partycloud_build
+  echo -n "-----> Installing Partycloud $partycloud_build"
+  curl --silent -L $partycloud_url | tar xz
+  echo " done"
+fi
+cp $cache/partycloud-$partycloud_build/partycloud.jar $build
+
+# essentials
+ver="2.10.1"
+if test -d $cache/essentials-$ver
+then
+  echo "-----> Using Essentials $ver"
+else
+  mkdir -p $cache/essentials-$ver
+  cd $cache/essentials-$ver
+  echo -n "-----> Installing Essentials $ver"
+  curl --silent -Lo essentials.zip http://dev.bukkit.org/media/files/671/664/Essentials.zip
+  unzip essentials.zip 2>&1 >/dev/null
+  rm essentials.zip
+
+  curl --silent -Lo groupmanager.zip http://ess.ementalo.com/guestAuth/repository/download/bt3/4923:id/Essentials-gm.zip
+  unzip groupmanager.zip 2>&1 >/dev/null
+  rm groupmanager.zip
+  echo " done"
+fi
+mkdir -p $build/essentials
+cp $cache/essentials-$ver/*.jar $build/essentials
+
+
+# towny
+ver="82.1.0"
+if test -d $cache/towny-$ver
+then
+  echo "-----> Using Towny $ver"
+else
+  mkdir -p $cache/towny-$ver
+  cd $cache/towny-$ver
+  echo -n "-----> Installing Towny $ver"
+  curl --silent -LO http://palmergames.com/downloads/townyrel/Towny.jar
+  # curl --silent -LO http://palmergames.com/downloads/chatdev/TownyChat.jar
+  # curl --silent -LO http://palmergames.com/downloads/HDdev/HeroicDeath.jar
+  # curl --silent -LO http://palmergames.com/downloads/paidranks/GMPaidRanks.jar
+  # curl --silent -LO http://palmergames.com/downloads/iCo501/iConomy.jar
+  # curl --silent -LO http://palmergames.com/downloads/mdfw/ModifyWorld.jar
+  echo " done"
+fi
+mkdir -p $build/towny
+cp -R $cache/towny-$ver/* $build/towny
+
+# iconomy
+ver="6.0.10b"
+if test -d $cache/iconomy-$ver
+then
+  echo "-----> Using iconomy $ver"
+else
+  mkdir -p $cache/iconomy-$ver
+  cd $cache/iconomy-$ver
+  echo -n "-----> Installing iconomy $ver"
+  curl --silent -LO http://dev.bukkit.org/media/files/584/551/iConomy.jar
+  curl --silent -LO http://www.palmergames.com/downloads/registerrel/Register.jar
+  echo " done"
+fi
+cp $cache/iconomy-$ver/*.jar $build
+
+cd $funpack
+mkdir -p $build/bin
+cp bin/run $build/bin
+cp bin/import $build/bin
+
+cp -R lib $build
+cp -R templates $build
+cp Procfile $build
+cp Gemfile $build
+cp Gemfile.lock $build
+cp funpack.json $build
